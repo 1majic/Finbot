@@ -38,6 +38,16 @@ class EmailAlreadyReg(Exception):
         return self.message
 
 
+class EmailIncorrect(Exception):
+    """Пользователь с таким Email уже зарегистрирован"""
+    def __init__(self, message="Введите валидный Email"):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+
+
 class EmptyWalletList(Exception):
     """Список кошельков - пуст"""
     def __init__(self, message="Список кошельков - пуст"):

@@ -27,7 +27,7 @@ def add_user(password: str, email: str):
     })
 
 
-def insert(table: str, column_values: Dict):
+def insert(table: str, column_values: dict):
     columns = ', '.join(column_values.keys())
     values = [tuple(column_values.values())]
     placeholders = ", ".join("?" * len(column_values.keys()))

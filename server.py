@@ -1,20 +1,17 @@
 import loggings
-from aiogram import Bot, Dispatcher, executor, types
+from aiogram import Bot, Dispatcher, types, F
 
 import authorization
 import exceptions
 import wallets
 import db
 import expenses
+from config import *
 
 loggings.lets_logging("info", "\n\nЗапуск")
-API_TOKEN = "1592423126:AAHQvZ1hQbHrKu3mwprW8uWEmWefRr9bB-A"
 
-if API_TOKEN == "1592423126:AAHQvZ1hQbHrKu3mwprW8uWEmWefRr9bB-A":
-    print("http://t.me/ODFinancebbBot")
-
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+bot = Bot(token=API_TOKEN, parse_mode="HTML")
+dp = Dispatcher()
 
 Log = False
 
@@ -42,7 +39,19 @@ def no_login(func):
     return wrapper
 
 
-@dp.message_handler(commands=['start'])
+def is_email(string):
+    try:
+        if "@" in string and "." in string:
+            s1 = string.index("@")
+            s2 = string.index(".", s1)
+            if s1 != 0 and s2 != len(string) - 1:
+                return True
+    except:
+        pass
+    return False
+
+
+@dp.message(commands=['start'])
 @no_login
 async def start(message: types.Message):
     """Начальная команда для авторизации пользователя"""
@@ -50,7 +59,7 @@ async def start(message: types.Message):
         await message.answer('Для входа/регистрации введите:\n/login "email" "пароль"\n /reg "email" "пароль" \n')
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("/login "))
+@dp.message(lambda message: message.text.lower().startswith("/login "))
 @no_login
 async def login(message: types.Message):
     """Авторизация пользователя"""
@@ -75,7 +84,7 @@ async def login(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("/reg "))
+@dp.message(lambda message: message.text.lower().startswith("/reg "))
 @no_login
 async def register(message: types.Message):
     """Регистрация пользователя"""
@@ -85,6 +94,8 @@ async def register(message: types.Message):
         if len(text) != 3:
             raise exceptions.IncorrectCommand
         email = text[1]
+        if not is_email(email):
+            raise exceptions.EmailIncorrect
         password = text[2]
         checked = authorization.add_user(password, email)
         if checked:
@@ -100,23 +111,22 @@ async def register(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(commands=['help'])
+@dp.message(commands=['help'])
 @is_login
 async def send_help(message: types.Message):
     """Отправляет помощь по боту"""
     await message.answer(
         'Команды:\n\n'
-        '<b>"Список кошельков"</b> - выводит список всех кошельков\n\n'
-        '<b>"Общий баланс"</b> - выводит балансы всех кошельков и их сумму\n\n'
-        '<b>"Добавить/Удалить кошелек (название)"</b> - Добавить или удалить кошелек\n\n'
-        '<b>"Добавить в (название кошелька) доход/расход (сумма) (комментарий)"</b> - Добавляет расход или доход в '
+        '<b>"<code>Список кошельков</code>"</b> - выводит список всех кошельков\n\n'
+        '<b>"<code>Общий баланс</code>"</b> - выводит балансы всех кошельков и их сумму\n\n'
+        '<b>"<code>Добавить/Удалить кошелек (название)</code>"</b> - Добавить или удалить кошелек\n\n'
+        '<b>"<code>Добавить в (название кошелька) доход/расход (сумма) (комментарий)</code>"</b> - Добавляет расход или доход в '
         'указанный кошелек\n\n '
-        '<b>"Показать изменения за день/месяц/год/(дд.месяц.год) на всех/(название кошелька)"</b> - Показывает все '
-        'операции за указанный промежуток',
-        parse_mode=types.ParseMode.HTML)
+        '<b>"<code>Показать изменения за день/месяц/год/(дд.месяц.год) на всех/(название кошелька)</code>"</b> - Показывает все '
+        'операции за указанный промежуток\n\n"<code><b>Выйти из учетной записи</b></code>" - sign out')
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("общий баланс"))
+@dp.message(lambda message: message.text.lower().startswith("общий баланс"))
 @is_login
 async def all_balances(message: types.Message):
     """Показывает общий баланс и баланс каждого кошелька отдельно"""
@@ -126,15 +136,29 @@ async def all_balances(message: types.Message):
         if result == exceptions.EmptyWalletList:
             raise result
         balance, result = result[1], result[0]
-        await message.answer('\n\n'.join(result), parse_mode=types.ParseMode.HTML)
+        await message.answer('\n\n'.join(result), )
         await message.answer(f'Общий баланс по всем кошелькам: <b>{str(round(balance))}р</b>',
-                             parse_mode=types.ParseMode.HTML)
+                             )
     except Exception as e:
         loggings.lets_logging('warning', f'Ошибка:{str(e)}"')
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("добавить кошелек"))
+@dp.message(lambda message: message.text.lower().startswith("выйти из учетной записи"))
+@is_login
+async def exit_account(message: types.Message):
+    """Показывает общий баланс и баланс каждого кошелька отдельно"""
+    try:
+        global Log
+        loggings.lets_logging('info', 'Вызвана команда "выйти из учетной записи"')
+        Log = False
+        await start(message)
+    except Exception as e:
+        loggings.lets_logging('warning', f'Ошибка:{str(e)}"')
+        await message.answer(f"{str(e)}")
+
+
+@dp.message(lambda message: message.text.lower().startswith("добавить кошелек"))
 @is_login
 async def add_wallet(message: types.Message):
     """Добавляет кошелек в базу данных"""
@@ -149,13 +173,13 @@ async def add_wallet(message: types.Message):
             raise exceptions.WalletNameAlreadyUsed
         else:
             await message.answer(f'Кошелек "<b>{wallet.name}</b>" создан в {db.deparse_date(str(wallet.date))}',
-                                 parse_mode=types.ParseMode.HTML)
+                                 )
     except Exception as e:
         loggings.lets_logging('warning', f'Ошибка:{e}"')
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("удалить кошелек"))
+@dp.message(lambda message: message.text.lower().startswith("удалить кошелек"))
 @is_login
 async def del_wallet(message: types.Message):
     """Удаляет кошелек из базы данных"""
@@ -169,28 +193,28 @@ async def del_wallet(message: types.Message):
         if ('no such table' in str(wallet)) or ('syntax error' in str(wallet)):
             raise exceptions.WalletNotFound
         else:
-            await message.answer(f'Кошелек "<b>{wallet_name}</b>" удален', parse_mode=types.ParseMode.HTML)
+            await message.answer(f'Кошелек "<b>{wallet_name}</b>" удален', )
     except Exception as e:
         loggings.lets_logging('warning', f'Ошибка:{e}"')
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("список кошельков"))
+@dp.message(lambda message: message.text.lower().startswith("список кошельков"))
 @is_login
 async def wallet_list(message: types.Message):
     """Отображает список всех кошельков у данного пользователя"""
     try:
-        loggings.lets_logging('info', 'Вызвана команда "список кошелько"')
+        loggings.lets_logging('info', 'Вызвана команда "список кошельков"')
         all_wallets = '\n'.join(db.wallet_list())
         if not all_wallets:
             raise exceptions.EmptyWalletList
-        await message.answer(f"Список всех кошельков:\n\n{all_wallets}")
+        await message.answer(f"Список всех кошельков:\n\n<b>{all_wallets}</b>")
     except Exception as e:
         loggings.lets_logging('warning', f'Ошибка:{e}"')
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("добавить в "))
+@dp.message(lambda message: message.text.lower().startswith("добавить в "))
 @is_login
 async def add_expense(message: types.Message):
     """Добавляет доход/расход в базу данных"""
@@ -207,13 +231,13 @@ async def add_expense(message: types.Message):
         if expensive == exceptions.WalletNotFound:
             raise exceptions.WalletNotFound
         await message.answer(f'В "<b>{expensive.wallet}</b>" добавлен {expensive.type} {expensive.amount}',
-                             parse_mode=types.ParseMode.HTML)
+                             )
     except Exception as e:
         loggings.lets_logging('warning', f'Ошибка:{e}"')
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("показать изменения за день "))
+@dp.message(lambda message: message.text.lower().startswith("показать изменения за день "))
 @is_login
 async def show_expenses_day(message: types.Message):
     """Показывает все изменения кошелька/всех кошельков за день"""
@@ -227,7 +251,7 @@ async def show_expenses_day(message: types.Message):
         if 'no such table' in str(result):
             raise exceptions.WalletNotFound
         elif result:
-            await message.answer('\n\n'.join(result), parse_mode=types.ParseMode.HTML)
+            await message.answer('\n\n'.join(result), )
         else:
             raise exceptions.EmptyExpenses
     except Exception as e:
@@ -235,7 +259,7 @@ async def show_expenses_day(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("показать изменения за месяц "))
+@dp.message(lambda message: message.text.lower().startswith("показать изменения за месяц "))
 @is_login
 async def show_expenses_month(message: types.Message):
     """Показывает все изменения кошелька/всех кошельков за месяц"""
@@ -249,7 +273,7 @@ async def show_expenses_month(message: types.Message):
         if 'no such table' in str(result):
             raise exceptions.WalletNotFound
         if result:
-            await message.answer('\n\n'.join(result), parse_mode=types.ParseMode.HTML)
+            await message.answer('\n\n'.join(result), )
         else:
             raise exceptions.EmptyExpenses
     except Exception as e:
@@ -257,7 +281,7 @@ async def show_expenses_month(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("показать изменения за год "))
+@dp.message(lambda message: message.text.lower().startswith("показать изменения за год "))
 @is_login
 async def show_expenses_year(message: types.Message):
     """Показывает все изменения кошелька/всех кошельков за год"""
@@ -271,7 +295,7 @@ async def show_expenses_year(message: types.Message):
         if 'no such table' in str(result):
             raise exceptions.WalletNotFound
         if result:
-            await message.answer('\n\n'.join(result), parse_mode=types.ParseMode.HTML)
+            await message.answer('\n\n'.join(result), )
         else:
             raise exceptions.EmptyExpenses
     except Exception as e:
@@ -279,7 +303,7 @@ async def show_expenses_year(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler(lambda message: message.text.lower().startswith("показать изменения за "))
+@dp.message(lambda message: message.text.lower().startswith("показать изменения за "))
 @is_login
 async def show_expenses_date(message: types.Message):
     """Показывает все изменения кошелька/всех кошельков за определенный день"""
@@ -294,7 +318,7 @@ async def show_expenses_date(message: types.Message):
         if 'no such table' in str(result):
             raise exceptions.WalletNotFound
         if result:
-            await message.answer('\n\n'.join(result), parse_mode=types.ParseMode.HTML)
+            await message.answer('\n\n'.join(result), )
         else:
             raise exceptions.EmptyExpenses
     except Exception as e:
@@ -302,12 +326,13 @@ async def show_expenses_date(message: types.Message):
         await message.answer(f"{str(e)}")
 
 
-@dp.message_handler()
+@dp.message()
 @is_login
 async def unrecognized_command(message: types.Message):
     await message.answer("Неопознанная команда. Наберите <b>/help</b> для отображения списка команд.",
-                         parse_mode=types.ParseMode.HTML)
+                         )
 
 
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    print('http://t.me/OGFinbot')
+    dp.run_polling(bot)
